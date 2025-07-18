@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import './AudioPlayer.css';
+import { API_BASE_URL } from '../config/api';
 
 const AudioPlayer = ({ contentId, totalFiles }) => {
-  const [playMode, setPlayMode] = useState('full'); // 'full' 또는 'part'
+  const [playMode, setPlayMode] = useState('full');
   const [currentPart, setCurrentPart] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -14,66 +14,82 @@ const AudioPlayer = ({ contentId, totalFiles }) => {
 
   // 현재 오디오 파일 URL
   const currentAudioUrl = playMode === 'full' 
-    ? `http://localhost:5159/api/audio/${contentId}/full`
-    : `http://localhost:5159/api/audio/${contentId}/${currentPart}`;
+    ? `${API_BASE_URL}/api/audio/${contentId}/full`
+    : `${API_BASE_URL}/api/audio/${contentId}/${currentPart}`;
 
   useEffect(() => {
     const audio = audioRef.current;
-    
-    const setAudioData = () => {
+    if (!audio) return;
+
+    const handleLoadedMetadata = () => {
+      console.log('오디오 메타데이터 로드됨');
       setDuration(audio.duration || 0);
-      setCurrentTime(audio.currentTime || 0);
+      setLoading(false);
       setError(null);
     };
 
-    const setAudioTime = () => setCurrentTime(audio.currentTime || 0);
-    
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime || 0);
+    };
+
     const handleLoadStart = () => {
+      console.log('오디오 로딩 시작:', currentAudioUrl);
       setLoading(true);
       setError(null);
     };
-    
+
     const handleCanPlay = () => {
+      console.log('오디오 재생 준비됨');
       setLoading(false);
     };
-    
+
     const handleError = (e) => {
-      console.error('오디오 로딩 오류:', e);
+      console.error('오디오 에러:', e);
+      console.error('오디오 URL:', currentAudioUrl);
       setLoading(false);
-      setError('오디오 파일을 재생할 수 없습니다.');
+      setError(`오디오를 로드할 수 없습니다. (${playMode === 'full' ? '전체' : `파트 ${currentPart}`})`);
       setIsPlaying(false);
     };
 
-    if (audio) {
-      audio.addEventListener('loadeddata', setAudioData);
-      audio.addEventListener('timeupdate', setAudioTime);
-      audio.addEventListener('loadstart', handleLoadStart);
-      audio.addEventListener('canplay', handleCanPlay);
-      audio.addEventListener('error', handleError);
-      
-      return () => {
-        audio.removeEventListener('loadeddata', setAudioData);
-        audio.removeEventListener('timeupdate', setAudioTime);
-        audio.removeEventListener('loadstart', handleLoadStart);
-        audio.removeEventListener('canplay', handleCanPlay);
-        audio.removeEventListener('error', handleError);
-      };
-    }
-  }, [playMode, currentPart]);
+    const handleEnded = () => {
+      setIsPlaying(false);
+      // 파트 모드에서 자동으로 다음 파트 재생
+      if (playMode === 'part' && currentPart < totalFiles) {
+        setCurrentPart(prev => prev + 1);
+      }
+    };
+
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('loadstart', handleLoadStart);
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('error', handleError);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('loadstart', handleLoadStart);
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('error', handleError);
+      audio.removeEventListener('ended', handleEnded);
+    };
+  }, [currentAudioUrl, playMode, currentPart, totalFiles]);
 
   // 파일 변경 시 오디오 리로드
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.load();
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
+      setError(null);
+      audioRef.current.load();
     }
   }, [playMode, currentPart]);
 
   // 재생/일시정지
   const togglePlayPause = async () => {
-    if (!audioRef.current) return;
+    if (!audioRef.current || loading) return;
     
     try {
       if (isPlaying) {
@@ -102,35 +118,20 @@ const AudioPlayer = ({ contentId, totalFiles }) => {
     setIsPlaying(false);
   };
 
-  // 다음/이전 파트 (파트 모드일 때만)
-  const nextPart = () => {
-    if (playMode === 'part' && currentPart < totalFiles) {
-      setCurrentPart(currentPart + 1);
-      setIsPlaying(false);
-    }
-  };
-
-  const prevPart = () => {
-    if (playMode === 'part' && currentPart > 1) {
-      setCurrentPart(currentPart - 1);
-      setIsPlaying(false);
-    }
-  };
-
   // 진행바 클릭
   const handleSeek = (e) => {
-    if (!duration) return;
+    if (!duration || !audioRef.current) return;
     
-    const progressBar = e.currentTarget;
-    const clickX = e.nativeEvent.offsetX;
-    const width = progressBar.offsetWidth;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const width = rect.width;
     const newTime = (clickX / width) * duration;
     audioRef.current.currentTime = newTime;
   };
 
   // 볼륨 조절
   const handleVolumeChange = (e) => {
-    const newVolume = e.target.value;
+    const newVolume = parseFloat(e.target.value);
     setVolume(newVolume);
     if (audioRef.current) {
       audioRef.current.volume = newVolume;
@@ -140,113 +141,115 @@ const AudioPlayer = ({ contentId, totalFiles }) => {
   // 시간 포맷팅
   const formatTime = (time) => {
     if (!time || isNaN(time)) return '0:00';
-    const hours = Math.floor(time / 3600);
-    const minutes = Math.floor((time % 3600) / 60);
+    const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
-    
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
   return (
-    <div className="audio-player">
-      <audio 
-        ref={audioRef} 
-        preload="metadata"
-        onEnded={() => {
-          setIsPlaying(false);
-          if (playMode === 'part' && currentPart < totalFiles) {
-            nextPart();
-          }
-        }}
-      >
+    <div style={{ border: '1px solid #ddd', padding: '20px', borderRadius: '8px', background: '#f9f9f9' }}>
+      <audio ref={audioRef} preload="metadata">
         <source src={currentAudioUrl} type="audio/mp4" />
         <source src={currentAudioUrl} type="audio/mpeg" />
-        브라우저가 오디오 재생을 지원하지 않습니다.
+        브라우저가 오디오를 지원하지 않습니다.
       </audio>
       
+      {/* 디버그 정보 */}
+      <div style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
+        <div>URL: {currentAudioUrl}</div>
+        <div>상태: {loading ? '로딩 중' : error ? '에러' : '준비됨'}</div>
+      </div>
+      
       {/* 재생 모드 선택 */}
-      <div className="playback-mode">
+      <div style={{ marginBottom: '15px' }}>
         <button 
           onClick={switchToFullMode}
-          className={`mode-btn ${playMode === 'full' ? 'active' : ''}`}
+          style={{ 
+            marginRight: '10px', 
+            padding: '5px 10px',
+            backgroundColor: playMode === 'full' ? '#007bff' : '#f8f9fa',
+            color: playMode === 'full' ? 'white' : 'black',
+            border: '1px solid #ddd',
+            borderRadius: '4px'
+          }}
         >
           전체 재생
         </button>
-        <div className="part-selector">
-          <span>파트별 재생:</span>
-          <div className="part-buttons">
-            {Array.from({ length: totalFiles }, (_, i) => i + 1).map(partNum => (
-              <button
-                key={partNum}
-                onClick={() => switchToPartMode(partNum)}
-                className={`part-btn ${playMode === 'part' && currentPart === partNum ? 'active' : ''}`}
-              >
-                {partNum}
-              </button>
-            ))}
-          </div>
-        </div>
+        
+        <span style={{ marginRight: '10px' }}>파트별:</span>
+        {Array.from({ length: totalFiles }, (_, i) => i + 1).map(partNum => (
+          <button
+            key={partNum}
+            onClick={() => switchToPartMode(partNum)}
+            style={{
+              margin: '0 2px',
+              padding: '5px 8px',
+              backgroundColor: playMode === 'part' && currentPart === partNum ? '#dc3545' : '#f8f9fa',
+              color: playMode === 'part' && currentPart === partNum ? 'white' : 'black',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '12px'
+            }}
+          >
+            {partNum}
+          </button>
+        ))}
       </div>
 
       {/* 현재 재생 정보 */}
-      <div className="playback-info">
-        {playMode === 'full' ? (
-          <span>전체 파일 재생 중</span>
-        ) : (
-          <span>파트 {currentPart} / {totalFiles} 재생 중</span>
-        )}
-        {loading && <span className="loading-text">로딩 중...</span>}
-        {error && <span className="error-text">{error}</span>}
+      <div style={{ textAlign: 'center', marginBottom: '10px', fontWeight: 'bold' }}>
+        {playMode === 'full' ? '전체 파일' : `파트 ${currentPart}/${totalFiles}`}
+        {loading && <span style={{ color: '#007bff', marginLeft: '10px' }}>로딩 중...</span>}
+        {error && <div style={{ color: '#dc3545', fontSize: '14px' }}>{error}</div>}
       </div>
 
       {/* 컨트롤 버튼 */}
-      <div className="controls">
-        {playMode === 'part' && (
-          <button 
-            onClick={prevPart} 
-            disabled={currentPart === 1 || loading}
-            className="control-btn"
-          >
-            ⏮️
-          </button>
-        )}
-        
+      <div style={{ textAlign: 'center', marginBottom: '15px' }}>
         <button 
           onClick={togglePlayPause}
           disabled={loading}
-          className="play-pause-btn"
+          style={{
+            fontSize: '24px',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '4px',
+            backgroundColor: '#007bff',
+            color: 'white',
+            cursor: loading ? 'not-allowed' : 'pointer'
+          }}
         >
           {loading ? '⏳' : (isPlaying ? '⏸️' : '▶️')}
         </button>
-        
-        {playMode === 'part' && (
-          <button 
-            onClick={nextPart} 
-            disabled={currentPart === totalFiles || loading}
-            className="control-btn"
-          >
-            ⏭️
-          </button>
-        )}
       </div>
 
       {/* 진행바 */}
-      <div className="progress-section">
-        <span className="time">{formatTime(currentTime)}</span>
-        <div className="progress-bar" onClick={handleSeek}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+        <span style={{ fontSize: '14px', minWidth: '40px' }}>{formatTime(currentTime)}</span>
+        <div 
+          onClick={handleSeek}
+          style={{ 
+            flex: 1, 
+            height: '6px', 
+            backgroundColor: '#ddd', 
+            borderRadius: '3px', 
+            cursor: 'pointer',
+            position: 'relative'
+          }}
+        >
           <div 
-            className="progress-fill"
-            style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+            style={{ 
+              width: `${duration ? (currentTime / duration) * 100 : 0}%`,
+              height: '100%',
+              backgroundColor: '#007bff',
+              borderRadius: '3px'
+            }}
           />
         </div>
-        <span className="time">{formatTime(duration)}</span>
+        <span style={{ fontSize: '14px', minWidth: '40px' }}>{formatTime(duration)}</span>
       </div>
 
       {/* 볼륨 조절 */}
-      <div className="volume-section">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
         <span>🔊</span>
         <input
           type="range"
@@ -255,8 +258,9 @@ const AudioPlayer = ({ contentId, totalFiles }) => {
           step="0.1"
           value={volume}
           onChange={handleVolumeChange}
-          className="volume-slider"
+          style={{ width: '100px' }}
         />
+        <span style={{ fontSize: '14px' }}>{Math.round(volume * 100)}%</span>
       </div>
     </div>
   );

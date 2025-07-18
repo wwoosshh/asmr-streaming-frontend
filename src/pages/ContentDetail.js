@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api, { API_BASE_URL } from '../config/api';
 import AudioPlayer from '../components/AudioPlayer';
 
 const ContentDetail = () => {
@@ -21,9 +21,9 @@ const ContentDetail = () => {
     setError(null);
     
     try {
-      console.log('컨텐츠 요청:', id);
-      const response = await axios.get(`http://localhost:5159/api/contents/${id}`);
-      console.log('컨텐츠 응답:', response.data);
+      console.log('컨텐츠 상세 요청:', id);
+      const response = await api.get(`/api/contents/${id}`);
+      console.log('컨텐츠 상세 응답:', response.data);
       setContent(response.data);
     } catch (error) {
       console.error('컨텐츠 로딩 오류:', error);
@@ -39,99 +39,145 @@ const ContentDetail = () => {
 
   if (loading) {
     return (
-      <div className="loading-container">
-        <div className="loading">컨텐츠 로딩 중...</div>
+      <div className="container">
+        <div style={{ textAlign: 'center', padding: '50px' }}>컨텐츠 로딩 중...</div>
       </div>
     );
   }
   
   if (error) {
     return (
-      <div className="error-container">
-        <div className="error">{error}</div>
-        <button onClick={() => navigate('/')}>홈으로 돌아가기</button>
+      <div className="container">
+        <div style={{ textAlign: 'center', padding: '50px' }}>
+          <div style={{ color: '#dc3545', marginBottom: '20px' }}>{error}</div>
+          <button onClick={() => navigate('/')} style={{
+            backgroundColor: '#007bff',
+            color: 'white',
+            border: 'none',
+            padding: '10px 20px',
+            borderRadius: '5px',
+            cursor: 'pointer'
+          }}>
+            홈으로 돌아가기
+          </button>
+        </div>
       </div>
     );
   }
   
   if (!content) {
     return (
-      <div className="error-container">
-        <div className="error">컨텐츠 데이터가 없습니다.</div>
-        <button onClick={() => navigate('/')}>홈으로 돌아가기</button>
+      <div className="container">
+        <div style={{ textAlign: 'center', padding: '50px' }}>
+          <div style={{ color: '#dc3545', marginBottom: '20px' }}>컨텐츠 데이터가 없습니다.</div>
+          <button onClick={() => navigate('/')}>홈으로 돌아가기</button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="content-detail">
-      <div className="container">
-        <button onClick={() => navigate('/')} className="back-button">
-          ← 돌아가기
-        </button>
+    <div className="container">
+      <button 
+        onClick={() => navigate('/')} 
+        style={{
+          backgroundColor: '#007bff',
+          color: 'white',
+          border: 'none',
+          padding: '10px 20px',
+          borderRadius: '5px',
+          cursor: 'pointer',
+          marginBottom: '20px'
+        }}
+      >
+        ← 돌아가기
+      </button>
+      
+      <div style={{ display: 'flex', gap: '30px', marginBottom: '30px' }}>
+        <div style={{ flexShrink: 0 }}>
+          <img 
+            src={`${API_BASE_URL}/api/audio/image/${content.id}`}
+            alt={content.title}
+            style={{
+              width: '300px',
+              height: '300px',
+              objectFit: 'cover',
+              borderRadius: '8px'
+            }}
+            onError={(e) => {
+              console.log('이미지 로딩 실패:', e.target.src);
+              e.target.style.display = 'none';
+            }}
+            onLoad={() => {
+              console.log('이미지 로딩 성공');
+            }}
+          />
+        </div>
         
-        <div className="content-header">
-          <div className="content-image-container">
-            <img 
-              src={`http://localhost:5159/api/audio/image/${content.id}`}
-              alt={content.title}
-              className="content-main-image"
-              onError={(e) => {
-                console.log('이미지 로딩 실패');
-                e.target.style.display = 'none';
-              }}
-              onLoad={() => {
-                console.log('이미지 로딩 성공');
-              }}
-            />
+        <div style={{ flex: 1 }}>
+          <h1 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>{content.title}</h1>
+          <p style={{ color: '#666', lineHeight: '1.6', marginBottom: '20px' }}>
+            {content.description}
+          </p>
+          
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ display: 'flex', marginBottom: '8px' }}>
+              <span style={{ fontWeight: 'bold', marginRight: '10px', minWidth: '80px' }}>재생시간:</span>
+              <span>{Math.floor(content.duration_minutes / 60)}시간 {content.duration_minutes % 60}분</span>
+            </div>
+            <div style={{ display: 'flex', marginBottom: '8px' }}>
+              <span style={{ fontWeight: 'bold', marginRight: '10px', minWidth: '80px' }}>수위:</span>
+              <span style={{
+                backgroundColor: '#dc3545',
+                color: 'white',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                fontSize: '12px'
+              }}>
+                {content.content_rating}
+              </span>
+            </div>
+            <div style={{ display: 'flex', marginBottom: '8px' }}>
+              <span style={{ fontWeight: 'bold', marginRight: '10px', minWidth: '80px' }}>파일 수:</span>
+              <span>{content.total_files}개</span>
+            </div>
           </div>
           
-          <div className="content-info-detail">
-            <h1>{content.title}</h1>
-            <p className="content-description-detail">{content.description}</p>
-            
-            <div className="content-metadata">
-              <div className="meta-item">
-                <span className="meta-label">재생시간:</span>
-                <span>{Math.floor(content.duration_minutes / 60)}시간 {content.duration_minutes % 60}분</span>
-              </div>
-              <div className="meta-item">
-                <span className="meta-label">수위:</span>
-                <span className="rating-badge">{content.content_rating}</span>
-              </div>
-              <div className="meta-item">
-                <span className="meta-label">파일 수:</span>
-                <span>{content.total_files}개</span>
-              </div>
-            </div>
-            
-            <div className="content-stats-detail">
-              <span>👁️ {content.view_count?.toLocaleString() || 0} 조회</span>
-              <span>❤️ {content.like_count?.toLocaleString() || 0} 좋아요</span>
-            </div>
+          <div style={{ display: 'flex', gap: '20px', fontSize: '16px' }}>
+            <span>👁️ {content.view_count?.toLocaleString() || 0} 조회</span>
+            <span>❤️ {content.like_count?.toLocaleString() || 0} 좋아요</span>
           </div>
         </div>
-
-        {/* 음성 플레이어 */}
-        <div className="audio-player-section">
-          <h3>재생</h3>
-          <AudioPlayer contentId={content.id} totalFiles={content.total_files} />
-        </div>
-
-        {/* 태그 표시 */}
-        {content.tags && content.tags.length > 0 && (
-          <div className="tags-section">
-            <h3>태그</h3>
-            <div className="tags">
-              {content.tags.map((tag, index) => (
-                <span key={index} className="tag">
-                  {tag.name}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* 음성 플레이어 */}
+      <div style={{ marginBottom: '30px' }}>
+        <h3>재생</h3>
+        <AudioPlayer contentId={content.id} totalFiles={content.total_files} />
+      </div>
+
+      {/* 태그 표시 */}
+      {content.tags && content.tags.length > 0 && (
+        <div>
+          <h3>태그</h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {content.tags.map((tag, index) => (
+              <span 
+                key={index} 
+                style={{
+                  backgroundColor: '#007bff',
+                  color: 'white',
+                  padding: '4px 12px',
+                  borderRadius: '16px',
+                  fontSize: '14px'
+                }}
+              >
+                {tag.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

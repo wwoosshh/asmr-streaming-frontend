@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
+import api, { API_BASE_URL } from '../config/api';
 
 const Home = () => {
   const [contents, setContents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchContents();
@@ -12,10 +13,14 @@ const Home = () => {
 
   const fetchContents = async () => {
     try {
-      const response = await axios.get('http://localhost:5159/api/contents');
+      console.log('컨텐츠 목록 요청 중...');
+      const response = await api.get('/api/contents');
+      console.log('컨텐츠 응답:', response.data);
       setContents(response.data);
+      setError(null);
     } catch (error) {
-      console.error('컨텐츠 로딩 중 오류:', error);
+      console.error('컨텐츠 로딩 오류:', error);
+      setError('컨텐츠를 불러오는 중 오류가 발생했습니다.');
       setContents([]);
     } finally {
       setLoading(false);
@@ -23,48 +28,100 @@ const Home = () => {
   };
 
   if (loading) {
-    return <div className="loading">로딩 중...</div>;
+    return (
+      <div className="container">
+        <div style={{ textAlign: 'center', padding: '50px' }}>로딩 중...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container">
+        <div style={{ textAlign: 'center', padding: '50px', color: '#dc3545' }}>
+          {error}
+          <br />
+          <button onClick={fetchContents} style={{ marginTop: '10px' }}>
+            다시 시도
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="home">
-      <div className="container">
-        <h2>ASMR 컨텐츠</h2>
-        <div className="content-grid">
-          {contents.length === 0 ? (
-            <p>아직 등록된 컨텐츠가 없습니다.</p>
-          ) : (
-            contents.map(content => (
-              <Link key={content.id} to={`/content/${content.id}`} className="content-link">
-                <div className="content-card">
-                  <img 
-                    src={`http://localhost:5159${content.profile_image_url}`}
-                    alt={content.title}
-                    className="content-image"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                  />
-                  <div className="content-info">
-                    <h3>{content.title}</h3>
-                    <p className="content-description">{content.description}</p>
-                    <div className="content-meta">
-                      <span className="duration">
-                        {Math.floor(content.duration_minutes / 60)}시간 {content.duration_minutes % 60}분
-                      </span>
-                      <span className="rating">{content.content_rating}</span>
-                    </div>
-                    <div className="content-stats">
-                      <span>👁️ {content.view_count}</span>
-                      <span>❤️ {content.like_count}</span>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            ))
-          )}
+    <div className="container">
+      <h2>ASMR 컨텐츠</h2>
+      
+      {contents.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '50px' }}>
+          <p>등록된 컨텐츠가 없습니다.</p>
         </div>
-      </div>
+      ) : (
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', 
+          gap: '20px',
+          marginTop: '20px'
+        }}>
+          {contents.map(content => (
+            <Link 
+              key={content.id} 
+              to={`/content/${content.id}`} 
+              style={{ textDecoration: 'none', color: 'inherit' }}
+            >
+              <div style={{
+                backgroundColor: 'white',
+                padding: '20px',
+                borderRadius: '8px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                transition: 'transform 0.2s'
+              }}>
+                <img 
+                  src={`${API_BASE_URL}/api/audio/image/${content.id}`}
+                  alt={content.title}
+                  style={{
+                    width: '100%',
+                    height: '200px',
+                    objectFit: 'cover',
+                    borderRadius: '4px',
+                    marginBottom: '15px'
+                  }}
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                  }}
+                />
+                
+                <h3 style={{ margin: '0 0 10px 0' }}>{content.title}</h3>
+                <p style={{ color: '#666', margin: '10px 0', lineHeight: '1.4' }}>
+                  {content.description}
+                </p>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', margin: '10px 0', fontSize: '14px' }}>
+                  <span>
+                    {Math.floor(content.duration_minutes / 60)}시간 {content.duration_minutes % 60}분
+                  </span>
+                  <span style={{
+                    backgroundColor: '#dc3545',
+                    color: 'white',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    fontSize: '12px'
+                  }}>
+                    {content.content_rating}
+                  </span>
+                </div>
+                
+                <div style={{ display: 'flex', gap: '15px', fontSize: '14px', color: '#666' }}>
+                  <span>👁️ {content.view_count?.toLocaleString() || 0}</span>
+                  <span>❤️ {content.like_count?.toLocaleString() || 0}</span>
+                  <span>📁 {content.total_files}개 파트</span>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

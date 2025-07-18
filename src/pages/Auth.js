@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../config/api';
 
 const Auth = () => {
-  const [isLogin, setIsLogin] = useState(true);
+  const [searchParams] = useSearchParams();
+  const mode = searchParams.get('mode') || 'login';
+  const [isLogin, setIsLogin] = useState(mode === 'login');
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -14,6 +16,22 @@ const Auth = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const navigate = useNavigate();
+
+  // URL 파라미터가 변경될 때 모드 업데이트
+  useEffect(() => {
+    setIsLogin(mode === 'login');
+    setError('');
+    setSuccess('');
+    setFormData({ username: '', email: '', password: '', confirmPassword: '' });
+  }, [mode]);
+
+  // 이미 로그인된 사용자는 홈으로 리다이렉트
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      navigate('/');
+    }
+  }, [navigate]);
 
   const handleChange = (e) => {
     setFormData({
@@ -110,8 +128,8 @@ const Auth = () => {
         });
         
         setSuccess('회원가입이 완료되었습니다! 로그인해주세요.');
-        setIsLogin(true);
-        setFormData({ username: '', email: '', password: '', confirmPassword: '' });
+        // URL을 로그인 모드로 변경
+        navigate('/auth?mode=login');
       }
     } catch (error) {
       console.error('인증 오류:', error);
@@ -131,10 +149,8 @@ const Auth = () => {
   };
 
   const toggleMode = () => {
-    setIsLogin(!isLogin);
-    setFormData({ username: '', email: '', password: '', confirmPassword: '' });
-    setError('');
-    setSuccess('');
+    const newMode = isLogin ? 'register' : 'login';
+    navigate(`/auth?mode=${newMode}`);
   };
 
   return (

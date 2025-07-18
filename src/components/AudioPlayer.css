@@ -1,0 +1,154 @@
+.audio-player {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 20px 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.playback-mode {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+}
+
+.mode-btn {
+  background-color: #ecf0f1;
+  color: #2c3e50;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 10px;
+  margin-bottom: 10px;
+}
+
+.mode-btn.active {
+  background-color: #3498db;
+  color: white;
+}
+
+.part-selector {
+  margin-top: 10px;
+}
+
+.part-selector span {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: bold;
+}
+
+.part-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.part-btn {
+  background-color: #ecf0f1;
+  color: #2c3e50;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 35px;
+}
+
+.part-btn.active {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.part-btn:hover {
+  background-color: #bdc3c7;
+}
+
+.part-btn.active:hover {
+  background-color: #c0392b;
+}
+
+.playback-info {
+  text-align: center;
+  margin-bottom: 15px;
+  font-weight: bold;
+  color: #333;
+}
+
+.controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.control-btn, .play-pause-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  transition: background-color 0.3s;
+}
+
+.control-btn:hover, .play-pause-btn:hover {
+  background-color: rgba(0,0,0,0.1);
+}
+
+.control-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.progress-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 6px;
+  background-color: #ddd;
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: #3498db;
+  border-radius: 3px;
+  transition: width 0.1s;
+}
+
+.time {
+  font-size: 14px;
+  color: #666;
+  min-width: 50px;
+}
+
+.volume-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+}
+
+.volume-slider {
+  width: 100px;
+}
+
+.loading-text {
+  color: #3498db;
+  margin-left: 10px;
+}
+
+.error-text {
+  color: #e74c3c;
+  margin-left: 10px;
+}

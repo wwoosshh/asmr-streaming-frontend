@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api, { API_BASE_URL } from '../config/api';
+import api from '../config/api';
 import AudioPlayer from '../components/AudioPlayer';
+import ImageGallery from '../components/ImageGallery';
 
 const ContentDetail = () => {
   const { id } = useParams();
@@ -22,7 +23,8 @@ const ContentDetail = () => {
     
     try {
       console.log('컨텐츠 상세 요청:', id);
-      const response = await api.get(`/api/contents/${id}`);
+      // 업데이트된 API 라우트 사용
+      const response = await api.get(`/api/contents/detail/${id}`);
       console.log('컨텐츠 상세 응답:', response.data);
       setContent(response.data);
     } catch (error) {
@@ -94,26 +96,12 @@ const ContentDetail = () => {
       </button>
       
       <div style={{ display: 'flex', gap: '30px', marginBottom: '30px' }}>
-        <div style={{ flexShrink: 0 }}>
-          <img 
-            src={`${API_BASE_URL}/api/audio/image/${content.id}`}
-            alt={content.title}
-            style={{
-              width: '300px',
-              height: '300px',
-              objectFit: 'cover',
-              borderRadius: '8px'
-            }}
-            onError={(e) => {
-              console.log('이미지 로딩 실패:', e.target.src);
-              e.target.style.display = 'none';
-            }}
-            onLoad={() => {
-              console.log('이미지 로딩 성공');
-            }}
-          />
+        {/* 이미지 갤러리 영역 */}
+        <div style={{ flexShrink: 0, width: '350px' }}>
+          <ImageGallery contentId={content.id} />
         </div>
         
+        {/* 컨텐츠 정보 영역 */}
         <div style={{ flex: 1 }}>
           <h1 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>{content.title}</h1>
           <p style={{ color: '#666', lineHeight: '1.6', marginBottom: '20px' }}>

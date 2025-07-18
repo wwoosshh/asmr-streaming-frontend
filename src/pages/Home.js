@@ -78,7 +78,7 @@ const Home = () => {
                 transition: 'transform 0.2s'
               }}>
                 <img 
-                  src={`${API_BASE_URL}/api/audio/image/${content.id}`}
+                  src={`${API_BASE_URL}/api/audio/image-main/${content.id}`}
                   alt={content.title}
                   style={{
                     width: '100%',

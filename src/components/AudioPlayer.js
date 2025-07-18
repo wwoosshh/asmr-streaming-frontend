@@ -12,10 +12,10 @@ const AudioPlayer = ({ contentId, totalFiles }) => {
   const [error, setError] = useState(null);
   const audioRef = useRef(null);
 
-  // 현재 오디오 파일 URL
+  // 현재 오디오 파일 URL (업데이트된 라우트 사용)
   const currentAudioUrl = playMode === 'full' 
-    ? `${API_BASE_URL}/api/audio/${contentId}/full`
-    : `${API_BASE_URL}/api/audio/${contentId}/${currentPart}`;
+    ? `${API_BASE_URL}/api/audio/audio-full/${contentId}`
+    : `${API_BASE_URL}/api/audio/audio-part/${contentId}/${currentPart}`;
 
   useEffect(() => {
     const audio = audioRef.current;

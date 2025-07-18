@@ -66,8 +66,38 @@ const Header = () => {
           
           {user ? (
             <>
+              {/* 관리자에게만 관리자 패널 링크 표시 */}
+              {user.role === 'admin' && (
+                <Link 
+                  to="/admin" 
+                  style={{
+                    color: '#fff',
+                    textDecoration: 'none',
+                    padding: '8px 16px',
+                    borderRadius: '4px',
+                    backgroundColor: '#e74c3c',
+                    transition: 'background-color 0.3s'
+                  }}
+                  onMouseOver={(e) => e.target.style.backgroundColor = '#c0392b'}
+                  onMouseOut={(e) => e.target.style.backgroundColor = '#e74c3c'}
+                >
+                  관리자
+                </Link>
+              )}
+              
               <span style={{ color: '#fff' }}>
                 안녕하세요, {user.username}님!
+                {user.role === 'admin' && (
+                  <span style={{ 
+                    marginLeft: '5px', 
+                    padding: '2px 6px', 
+                    backgroundColor: '#e74c3c', 
+                    borderRadius: '3px',
+                    fontSize: '12px'
+                  }}>
+                    관리자
+                  </span>
+                )}
               </span>
               <button
                 onClick={handleLogout}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api, { API_BASE_URL } from '../config/api';
+import ContentDescription from '../components/ContentDescription';
 
 const Home = () => {
   const [contents, setContents] = useState([]);
@@ -93,9 +94,9 @@ const Home = () => {
                 />
                 
                 <h3 style={{ margin: '0 0 10px 0' }}>{content.title}</h3>
-                <p style={{ color: '#666', margin: '10px 0', lineHeight: '1.4' }}>
-                  {content.description}
-                </p>
+                <div style={{ color: '#666', margin: '10px 0' }}>
+                  <ContentDescription description={content.description} />
+                </div>
                 
                 <div style={{ display: 'flex', justifyContent: 'space-between', margin: '10px 0', fontSize: '14px' }}>
                   <span>

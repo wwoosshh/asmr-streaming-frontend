@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../config/api';
 import AudioPlayer from '../components/AudioPlayer';
 import ImageGallery from '../components/ImageGallery';
+import ContentDescription from '../components/ContentDescription';
 
 const ContentDetail = () => {
   const { id } = useParams();
@@ -104,9 +105,9 @@ const ContentDetail = () => {
         {/* 컨텐츠 정보 영역 */}
         <div style={{ flex: 1 }}>
           <h1 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>{content.title}</h1>
-          <p style={{ color: '#666', lineHeight: '1.6', marginBottom: '20px' }}>
-            {content.description}
-          </p>
+          <div style={{ color: '#666', marginBottom: '20px' }}>
+            <ContentDescription description={content.description} />
+          </div>
           
           <div style={{ marginBottom: '20px' }}>
             <div style={{ display: 'flex', marginBottom: '8px' }}>

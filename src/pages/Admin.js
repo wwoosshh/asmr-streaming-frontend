@@ -34,6 +34,7 @@ const Admin = () => {
 
   // 컨텐츠 업로드 상태
   const [uploadForm, setUploadForm] = useState({
+    customId: '',
     title: '',
     description: '',
     contentRating: 'All',
@@ -47,30 +48,78 @@ const Admin = () => {
 
   // 연결 상태 확인
   const checkConnection = useCallback(async () => {
-    try {
-      console.log('서버 연결 상태 확인 중...');
-      const response = await api.get('/api/health');
-      console.log('서버 상태:', response.data);
-      setConnectionError(null);
-      
-      const dbResponse = await api.get('/api/debug/db-test');
-      console.log('DB 상태:', dbResponse.data);
-      
-      const dbStructure = await api.get('/api/debug/db-structure');
-      console.log('DB 구조:', dbStructure.data);
-      setDebugInfo(dbStructure.data);
-      
-      return true;
-    } catch (error) {
-      console.error('연결 확인 오류:', error);
-      setConnectionError({
-        message: '서버 또는 데이터베이스 연결 오류',
-        details: error.response?.data || error.message,
-        status: error.response?.status
-      });
-      return false;
+  try {
+    console.log('서버 연결 상태 확인 중...');
+    
+    // 1. 헬스 체크
+    const healthResponse = await api.get('/api/health');
+    console.log('서버 상태:', healthResponse.data);
+    
+    // 2. DB 연결 테스트
+    const dbResponse = await api.get('/api/debug/db-test');
+    console.log('DB 상태:', dbResponse.data);
+    
+    // 3. DB 구조 확인
+    const dbStructure = await api.get('/api/debug/db-structure');
+    console.log('DB 구조:', dbStructure.data);
+    
+    // 4. 태그 테이블 전용 디버그
+    const tagDebug = await api.get('/api/debug/tags-debug');
+    console.log('태그 디버그:', tagDebug.data);
+    
+    // 5. 사용자 테이블 전용 디버그 (추가)
+    const userDebug = await api.get('/api/debug/users-debug');
+    console.log('사용자 디버그:', userDebug.data);
+    
+    setDebugInfo({
+      ...dbStructure.data,
+      tag_debug: tagDebug.data,
+      user_debug: userDebug.data  // 추가
+    });
+    setConnectionError(null);
+    
+    return true;
+  } catch (error) {
+    console.error('연결 확인 오류:', error);
+    
+    // 더 상세한 에러 정보
+    const errorInfo = {
+      message: '서버 또는 데이터베이스 연결 오류',
+      status: error.response?.status,
+      details: error.response?.data || error.message
+    };
+    
+    // 태그 관련 특별 오류 처리
+    if (error.response?.data?.message?.includes('tags')) {
+      errorInfo.suggestion = '태그 테이블이 없거나 손상되었을 수 있습니다. DB 마이그레이션을 확인하세요.';
     }
-  }, []);
+    
+    // 사용자 관련 특별 오류 처리 (추가)
+    if (error.response?.data?.message?.includes('users')) {
+      errorInfo.suggestion = '사용자 테이블이 없거나 손상되었을 수 있습니다. DB 마이그레이션을 확인하세요.';
+    }
+    
+    setConnectionError(errorInfo);
+    return false;
+  }
+}, []);
+
+const diagnoseTagIssues = async () => {
+  try {
+    console.log('태그 문제 진단 시작...');
+    const response = await api.get('/api/debug/tags-debug');
+    
+    if (response.data.status === 'success') {
+      alert(`태그 진단 결과:
+- 총 태그 수: ${response.data.total_tags}
+- 테이블 상태: 정상
+- 최근 태그: ${response.data.recent_tags?.length || 0}개`);
+    }
+  } catch (error) {
+    console.error('태그 진단 오류:', error);
+    alert(`태그 진단 실패: ${error.response?.data?.message || error.message}`);
+  }
+};
 
   const checkAdminAuth = useCallback(() => {
     const token = localStorage.getItem('token');
@@ -118,66 +167,102 @@ const Admin = () => {
   }, []);
 
   const fetchUsers = useCallback(async () => {
-    try {
-      console.log('사용자 목록 조회 시작...');
-      const response = await api.get(`/api/auth/users?page=${usersPagination.page}&limit=10`);
-      console.log('사용자 목록 응답:', response.data);
+  try {
+    console.log('사용자 목록 조회 시작...');
+    const response = await api.get(`/api/auth/users?page=${usersPagination.page}&limit=10`);
+    console.log('사용자 목록 응답:', response.data);
+    
+    if (response.data && response.data.users) {
       setUsers(response.data.users);
       setUsersPagination(prev => ({
         ...prev,
         totalPages: response.data.pagination.totalPages
       }));
-    } catch (error) {
-      console.error('사용자 목록 조회 오류:', error);
-      
-      if (error.response?.status === 500) {
-        const errorData = error.response.data;
-        alert(`데이터베이스 오류: ${errorData.error}\n${errorData.solution || '관리자에게 문의하세요.'}`);
-      } else {
-        alert('사용자 목록을 불러오는데 실패했습니다.');
-      }
+    } else {
+      console.error('사용자 데이터 형식 오류:', response.data);
+      setUsers([]);
     }
-  }, [usersPagination.page]);
+  } catch (error) {
+    console.error('사용자 목록 조회 오류:', error);
+    setUsers([]);
+    
+    if (error.response?.status === 500) {
+      const errorData = error.response.data;
+      let alertMessage = `데이터베이스 오류: ${errorData.error}`;
+      
+      if (errorData.solution) {
+        alertMessage += `\n\n해결방법: ${errorData.solution}`;
+      }
+      
+      if (errorData.details) {
+        alertMessage += `\n\n상세정보: ${errorData.details}`;
+      }
+      
+      alert(alertMessage);
+      
+      // 사용자 디버그 자동 실행
+      diagnoseUserIssues();
+    } else {
+      alert('사용자 목록을 불러오는데 실패했습니다.');
+    }
+  }
+}, [usersPagination.page]);
 
   const fetchTags = useCallback(async () => {
-    try {
-      console.log('태그 목록 조회 시작...');
-      const response = await api.get('/api/tags');
-      console.log('태그 목록 응답:', response.data);
+  try {
+    console.log('태그 목록 조회 시작...');
+    const response = await api.get('/api/tags');
+    console.log('태그 목록 응답:', response.data);
+    
+    // 안전한 데이터 접근
+    if (response.data && response.data.success !== false) {
       setTags(response.data.tags || []);
       setSelectedLetter('all');
-    } catch (error) {
-      console.error('태그 목록 조회 오류:', error);
-      
-      if (error.response?.status === 500) {
-        const errorData = error.response.data;
-        alert(`데이터베이스 오류: ${errorData.error}\n${errorData.solution || '관리자에게 문의하세요.'}`);
-      } else {
-        alert('태그 목록을 불러오는데 실패했습니다.');
-      }
+    } else {
+      console.error('태그 조회 실패:', response.data);
+      setTags([]);
+      alert('태그 목록을 불러오는데 실패했습니다.');
     }
-  }, []);
+  } catch (error) {
+    console.error('태그 목록 조회 오류:', error);
+    setTags([]);
+    
+    if (error.response?.status === 500) {
+      const errorData = error.response.data;
+      alert(`데이터베이스 오류: ${errorData.error}\n${errorData.solution || '관리자에게 문의하세요.'}`);
+    } else {
+      alert('태그 목록을 불러오는데 실패했습니다.');
+    }
+  }
+}, []);
 
   const fetchTagsByLetter = useCallback(async (letter) => {
-    try {
-      console.log('알파벳별 태그 조회:', letter);
-      if (letter === 'all') {
-        const response = await api.get('/api/tags');
-        console.log('전체 태그 응답:', response.data);
-        setTags(response.data.tags || []);
-        setSelectedLetter('all');
-        return;
-      }
-      
-      const response = await api.get(`/api/tags/letter/${letter}`);
-      console.log('알파벳별 태그 응답:', response.data);
+  try {
+    console.log('알파벳별 태그 조회:', letter);
+    
+    let url = '/api/tags';
+    if (letter && letter !== 'all') {
+      url += `?letter=${letter}`;
+    }
+    
+    const response = await api.get(url);
+    console.log('알파벳별 태그 응답:', response.data);
+    
+    // 안전한 데이터 접근
+    if (response.data && response.data.success !== false) {
       setTags(response.data.tags || []);
       setSelectedLetter(letter);
-    } catch (error) {
-      console.error('알파벳별 태그 조회 오류:', error);
+    } else {
+      console.error('태그 조회 실패:', response.data);
+      setTags([]);
       alert('태그를 불러오는데 실패했습니다.');
     }
-  }, []);
+  } catch (error) {
+    console.error('알파벳별 태그 조회 오류:', error);
+    setTags([]);
+    alert('태그를 불러오는데 실패했습니다.');
+  }
+}, []);
 
   useEffect(() => {
     const initializeAdmin = async () => {
@@ -221,28 +306,34 @@ const Admin = () => {
 
   // 태그 관리 함수들
   const handleCreateTag = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
+  
+  if (!newTag.name.trim()) {
+    alert('태그명을 입력해주세요.');
+    return;
+  }
+  
+  try {
+    const response = await api.post('/api/tags', { name: newTag.name.trim() });
     
-    if (!newTag.name.trim()) {
-      alert('태그명을 입력해주세요.');
-      return;
-    }
-    
-    try {
-      await api.post('/api/tags', { name: newTag.name.trim() });
+    if (response.data && response.data.success !== false) {
       alert('태그가 생성되었습니다.');
       setNewTag({ name: '' });
       
+      // 현재 선택된 필터에 따라 새로고침
       if (selectedLetter === 'all') {
         fetchTags();
       } else {
         fetchTagsByLetter(selectedLetter);
       }
-    } catch (error) {
-      console.error('태그 생성 오류:', error);
-      alert(error.response?.data?.error || '태그 생성에 실패했습니다.');
+    } else {
+      alert(response.data?.error || '태그 생성에 실패했습니다.');
     }
-  };
+  } catch (error) {
+    console.error('태그 생성 오류:', error);
+    alert(error.response?.data?.error || '태그 생성에 실패했습니다.');
+  }
+};
 
   const handleEditTag = (tag) => {
     setEditingTag({
@@ -318,6 +409,79 @@ const Admin = () => {
     }
   };
 
+  // useState에 ID 확인 관련 상태 추가
+const [idValidation, setIdValidation] = useState({
+  checking: false,
+  available: null,
+  message: '',
+  error: ''
+});
+
+// ID 확인 함수 추가
+const checkIdAvailability = async (id) => {
+  if (!id || !id.trim()) {
+    setIdValidation({
+      checking: false,
+      available: null,
+      message: '',
+      error: ''
+    });
+    return;
+  }
+  
+  const parsedId = parseInt(id.trim());
+  if (isNaN(parsedId) || parsedId <= 0) {
+    setIdValidation({
+      checking: false,
+      available: false,
+      message: '',
+      error: 'ID는 1 이상의 숫자여야 합니다.'
+    });
+    return;
+  }
+  
+  setIdValidation(prev => ({ ...prev, checking: true }));
+  
+  try {
+    const response = await api.get(`/api/admin/check-content-id/${parsedId}`);
+    
+    setIdValidation({
+      checking: false,
+      available: response.data.available,
+      message: response.data.message,
+      error: response.data.available ? '' : (response.data.existing_content?.suggestion || '')
+    });
+  } catch (error) {
+    console.error('ID 확인 오류:', error);
+    setIdValidation({
+      checking: false,
+      available: false,
+      message: '',
+      error: 'ID 확인 중 오류가 발생했습니다.'
+    });
+  }
+};
+
+// ID 제안 함수 추가
+const suggestNextId = async () => {
+  try {
+    const response = await api.get('/api/admin/suggest-content-id');
+    
+    setUploadForm(prev => ({
+      ...prev,
+      customId: response.data.suggested_id.toString()
+    }));
+    
+    // 제안된 ID도 확인
+    checkIdAvailability(response.data.suggested_id.toString());
+    
+    alert(`추천 ID: ${response.data.suggested_id}\n${response.data.message}`);
+  } catch (error) {
+    console.error('ID 제안 오류:', error);
+    alert('ID 제안 중 오류가 발생했습니다.');
+  }
+};
+
   // 컨텐츠 업로드 함수들
   const handleUploadFormChange = (e) => {
     const { name, value } = e.target;
@@ -325,7 +489,98 @@ const Admin = () => {
       ...uploadForm,
       [name]: value
     });
+    
+    // customId 변경 시 실시간 확인
+    if (name === 'customId') {
+      checkIdAvailability(value);
+    }
   };
+
+  const renderCustomIdSection = () => (
+  <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#e7f3ff', borderRadius: '8px' }}>
+    <h5 style={{ margin: '0 0 10px 0' }}>🆔 컨텐츠 ID 설정</h5>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+      <div style={{ flex: 1 }}>
+        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+          사용자 지정 ID (선택사항)
+        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <input
+            type="text"
+            name="customId"
+            value={uploadForm.customId}
+            onChange={handleUploadFormChange}
+            placeholder="예: 12345"
+            disabled={uploading}
+            style={{ 
+              width: '150px', 
+              padding: '8px', 
+              border: `1px solid ${
+                idValidation.available === true ? '#28a745' : 
+                idValidation.available === false ? '#dc3545' : '#ddd'
+              }`, 
+              borderRadius: '4px',
+              backgroundColor: 
+                idValidation.available === true ? '#f8fff8' : 
+                idValidation.available === false ? '#fff8f8' : 'white'
+            }}
+          />
+          
+          {idValidation.checking && (
+            <span style={{ color: '#007bff', fontSize: '14px' }}>확인 중...</span>
+          )}
+          
+          {idValidation.available === true && (
+            <span style={{ color: '#28a745', fontSize: '14px' }}>✅ 사용 가능</span>
+          )}
+          
+          {idValidation.available === false && (
+            <span style={{ color: '#dc3545', fontSize: '14px' }}>❌ 사용 불가</span>
+          )}
+          
+          <button
+            type="button"
+            onClick={suggestNextId}
+            disabled={uploading}
+            style={{
+              padding: '6px 12px',
+              backgroundColor: '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '12px'
+            }}
+          >
+            ID 추천
+          </button>
+        </div>
+        
+        <div style={{ marginTop: '5px' }}>
+          <small style={{ color: '#666', fontSize: '12px' }}>
+            숫자만 입력하세요. 비워두면 자동 생성됩니다.
+          </small>
+          
+          {idValidation.message && (
+            <div style={{ 
+              color: idValidation.available ? '#28a745' : '#dc3545', 
+              fontSize: '12px',
+              marginTop: '3px'
+            }}>
+              {idValidation.message}
+            </div>
+          )}
+          
+          {idValidation.error && (
+            <div style={{ color: '#dc3545', fontSize: '12px', marginTop: '3px' }}>
+              {idValidation.error}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
   const handleTagSelection = (tagId) => {
     const { selectedTags } = uploadForm;
@@ -377,69 +632,76 @@ const Admin = () => {
   };
 
   const handleUploadSubmit = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
+  
+  if (!validateUploadForm()) {
+    return;
+  }
+  
+  setUploading(true);
+  
+  try {
+    const formData = new FormData();
     
-    if (!validateUploadForm()) {
-      return;
+    // customId 추가
+    if (uploadForm.customId.trim()) {
+      formData.append('customId', uploadForm.customId.trim());
     }
     
-    setUploading(true);
+    formData.append('title', uploadForm.title);
+    formData.append('description', uploadForm.description);
+    formData.append('contentRating', uploadForm.contentRating);
+    formData.append('contentType', uploadForm.contentType);
+    formData.append('durationMinutes', uploadForm.durationMinutes);
+    formData.append('audioQuality', uploadForm.audioQuality);
+    formData.append('tagIds', uploadForm.selectedTags.join(','));
     
-    try {
-      const formData = new FormData();
-      
-      formData.append('title', uploadForm.title);
-      formData.append('description', uploadForm.description);
-      formData.append('contentRating', uploadForm.contentRating);
-      formData.append('contentType', uploadForm.contentType);
-      formData.append('durationMinutes', uploadForm.durationMinutes);
-      formData.append('audioQuality', uploadForm.audioQuality);
-      formData.append('tagIds', uploadForm.selectedTags.join(','));
-      
-      uploadFiles.forEach(file => {
-        formData.append('files', file);
-      });
-      
-      console.log('컨텐츠 업로드 시작');
-      
-      const response = await api.post('/api/admin/contents', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        },
-        timeout: 5 * 60 * 1000
-      });
-      
-      alert(`컨텐츠가 성공적으로 업로드되었습니다! (ID: ${response.data.contentId})`);
-      
-      setUploadForm({
-        title: '',
-        description: '',
-        contentRating: 'All',
-        contentType: 'Audio',
-        durationMinutes: '',
-        audioQuality: 'Standard',
-        selectedTags: []
-      });
-      setUploadFiles([]);
-      
-      const fileInput = document.querySelector('input[type="file"]');
-      if (fileInput) {
-        fileInput.value = '';
-      }
-      
-      fetchStats();
-      
-    } catch (error) {
-      console.error('업로드 오류:', error);
-      if (error.response?.data?.error) {
-        alert(`업로드 실패: ${error.response.data.error}`);
-      } else {
-        alert('업로드 중 오류가 발생했습니다.');
-      }
-    } finally {
-      setUploading(false);
+    uploadFiles.forEach(file => {
+      formData.append('files', file);
+    });
+    
+    console.log('컨텐츠 업로드 시작');
+    
+    const response = await api.post('/api/admin/contents', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      },
+      timeout: 5 * 60 * 1000
+    });
+    
+    alert(`컨텐츠가 성공적으로 업로드되었습니다! (ID: ${response.data.contentId})`);
+    
+    // 폼 초기화
+    setUploadForm({
+      customId: '',  // 추가
+      title: '',
+      description: '',
+      contentRating: 'All',
+      contentType: 'Audio',
+      durationMinutes: '',
+      audioQuality: 'Standard',
+      selectedTags: []
+    });
+    setUploadFiles([]);
+    
+    const fileInput = document.querySelector('input[type="file"]');
+    if (fileInput) {
+      fileInput.value = '';
     }
-  };
+    
+    fetchStats();
+    
+  } catch (error) {
+    console.error('업로드 오류:', error);
+    if (error.response?.data?.error) {
+      alert(`업로드 실패: ${error.response.data.error}`);
+    } else {
+      alert('업로드 중 오류가 발생했습니다.');
+    }
+  } finally {
+    setUploading(false);
+  }
+};
 
   // 연결 오류 표시 컴포넌트
   const renderConnectionError = () => {
@@ -485,39 +747,159 @@ const Admin = () => {
     );
   };
 
+  // 사용자 관련 오류 시 추가 진단 함수 (누락된 함수)
+const diagnoseUserIssues = async () => {
+  try {
+    console.log('사용자 문제 진단 시작...');
+    const response = await api.get('/api/debug/users-debug');
+    
+    if (response.data.status === 'success') {
+      const data = response.data;
+      let diagnosisMessage = `사용자 진단 결과:\n`;
+      diagnosisMessage += `- 총 사용자 수: ${data.total_users}\n`;
+      diagnosisMessage += `- 테이블 상태: 정상\n`;
+      diagnosisMessage += `- 최근 사용자: ${data.recent_users?.length || 0}개\n`;
+      
+      if (data.role_distribution && data.role_distribution.length > 0) {
+        diagnosisMessage += `- 권한별 분포:\n`;
+        data.role_distribution.forEach(role => {
+          diagnosisMessage += `  * ${role.role}: ${role.count}명\n`;
+        });
+      }
+      
+      if (data.table_structure && data.table_structure.length > 0) {
+        diagnosisMessage += `- 테이블 컬럼: ${data.table_structure.map(col => col.Field).join(', ')}\n`;
+      }
+      
+      alert(diagnosisMessage);
+      
+      // 진단 결과가 정상이면 사용자 목록 다시 조회
+      if (data.total_users > 0) {
+        console.log('진단 결과 정상 - 사용자 목록 재조회');
+        setTimeout(() => {
+          fetchUsers();
+        }, 1000);
+      }
+    }
+  } catch (error) {
+    console.error('사용자 진단 오류:', error);
+    alert(`사용자 진단 실패: ${error.response?.data?.message || error.message}`);
+  }
+};
+
   // 디버그 정보 표시 컴포넌트
   const renderDebugInfo = () => {
-    if (!debugInfo || activeTab !== 'dashboard') return null;
-    
-    return (
-      <details style={{ marginTop: '20px' }}>
-        <summary style={{ cursor: 'pointer', fontWeight: 'bold' }}>
-          🔧 디버그 정보 (개발용)
-        </summary>
-        <div style={{
-          background: '#f8f9fa',
-          padding: '15px',
-          borderRadius: '4px',
-          marginTop: '10px'
-        }}>
-          <h5>데이터베이스: {debugInfo.database}</h5>
-          <h6>테이블 목록:</h6>
-          <ul>
-            {Object.keys(debugInfo.tables || {}).map(tableName => (
-              <li key={tableName}>
-                <strong>{tableName}</strong>
-                {debugInfo.tables[tableName].error ? (
-                  <span style={{ color: 'red' }}> - 오류: {debugInfo.tables[tableName].error}</span>
-                ) : (
-                  <span style={{ color: 'green' }}> - OK ({debugInfo.tables[tableName].length} 컬럼)</span>
-                )}
-              </li>
-            ))}
-          </ul>
+  if (!debugInfo || activeTab !== 'dashboard') return null;
+  
+  return (
+    <details style={{ marginTop: '20px' }}>
+      <summary style={{ cursor: 'pointer', fontWeight: 'bold' }}>
+        🔧 디버그 정보 (개발용)
+      </summary>
+      <div style={{
+        background: '#f8f9fa',
+        padding: '15px',
+        borderRadius: '4px',
+        marginTop: '10px'
+      }}>
+        <h5>데이터베이스: {debugInfo.database}</h5>
+        
+        <h6>테이블 목록:</h6>
+        <ul>
+          {Object.keys(debugInfo.tables || {}).map(tableName => (
+            <li key={tableName}>
+              <strong>{tableName}</strong>
+              {debugInfo.tables[tableName].error ? (
+                <span style={{ color: 'red' }}> - 오류: {debugInfo.tables[tableName].error}</span>
+              ) : (
+                <span style={{ color: 'green' }}> - OK ({debugInfo.tables[tableName].length} 컬럼)</span>
+              )}
+            </li>
+          ))}
+        </ul>
+        
+        {/* 태그 디버그 정보 */}
+        {debugInfo.tag_debug && (
+          <div style={{ marginTop: '15px' }}>
+            <h6>태그 테이블 상세:</h6>
+            <div style={{ fontSize: '12px', fontFamily: 'monospace' }}>
+              <div>총 태그 수: {debugInfo.tag_debug.total_tags}</div>
+              <div>테스트 쿼리: {debugInfo.tag_debug.test_query_results?.simple_select}</div>
+              <div>그룹바이 쿼리: {debugInfo.tag_debug.test_query_results?.group_by_letter}</div>
+            </div>
+            
+            {debugInfo.tag_debug.recent_tags?.length > 0 && (
+              <details style={{ marginTop: '10px' }}>
+                <summary>최근 태그 샘플</summary>
+                <pre style={{ fontSize: '11px' }}>
+                  {JSON.stringify(debugInfo.tag_debug.recent_tags.slice(0, 3), null, 2)}
+                </pre>
+              </details>
+            )}
+          </div>
+        )}
+        
+        {/* 사용자 디버그 정보 추가 */}
+        {debugInfo.user_debug && (
+          <div style={{ marginTop: '15px' }}>
+            <h6>사용자 테이블 상세:</h6>
+            <div style={{ fontSize: '12px', fontFamily: 'monospace' }}>
+              <div>총 사용자 수: {debugInfo.user_debug.total_users}</div>
+              <div>테스트 쿼리: {debugInfo.user_debug.test_query_results?.simple_select}</div>
+              <div>권한별 그룹바이: {debugInfo.user_debug.test_query_results?.group_by_role}</div>
+            </div>
+            
+            {debugInfo.user_debug.role_distribution?.length > 0 && (
+              <div style={{ marginTop: '5px' }}>
+                권한 분포: {debugInfo.user_debug.role_distribution.map(r => `${r.role}(${r.count})`).join(', ')}
+              </div>
+            )}
+            
+            {debugInfo.user_debug.recent_users?.length > 0 && (
+              <details style={{ marginTop: '10px' }}>
+                <summary>최근 사용자 샘플</summary>
+                <pre style={{ fontSize: '11px' }}>
+                  {JSON.stringify(debugInfo.user_debug.recent_users.slice(0, 3), null, 2)}
+                </pre>
+              </details>
+            )}
+          </div>
+        )}
+        
+        <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+          <button 
+            onClick={diagnoseTagIssues}
+            style={{
+              padding: '5px 10px',
+              backgroundColor: '#17a2b8',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '12px'
+            }}
+          >
+            태그 문제 진단
+          </button>
+          <button 
+            onClick={diagnoseUserIssues}
+            style={{
+              padding: '5px 10px',
+              backgroundColor: '#6f42c1',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '12px'
+            }}
+          >
+            사용자 문제 진단
+          </button>
         </div>
-      </details>
-    );
-  };
+      </div>
+    </details>
+  );
+};
 
   const renderDashboard = () => (
     <div>
@@ -546,8 +928,74 @@ const Admin = () => {
   );
 
   const renderUserManagement = () => (
-    <div>
-      <h3>사용자 관리</h3>
+  <div>
+    <h3>사용자 관리</h3>
+    
+    {/* 🔧 디버그 버튼 섹션 */}
+    <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#e7f3ff', borderRadius: '8px' }}>
+      <h5 style={{ margin: '0 0 10px 0' }}>🔧 사용자 관리 도구</h5>
+      <div style={{ display: 'flex', gap: '10px' }}>
+        <button 
+          onClick={diagnoseUserIssues}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#17a2b8',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          사용자 테이블 진단
+        </button>
+        <button 
+          onClick={fetchUsers}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#28a745',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          사용자 목록 새로고침
+        </button>
+      </div>
+    </div>
+    
+    {/* 기존 사용자 테이블 코드는 그대로 유지하세요 */}
+    {users.length === 0 ? (
+      <div style={{
+        textAlign: 'center',
+        padding: '40px',
+        backgroundColor: '#fff3cd',
+        border: '1px solid #ffeaa7',
+        borderRadius: '8px'
+      }}>
+        <h4 style={{ margin: '0 0 15px 0', color: '#856404' }}>⚠️ 사용자 데이터 없음</h4>
+        <p style={{ margin: '0 0 15px 0', color: '#856404' }}>
+          사용자 목록을 불러올 수 없습니다.<br />
+          데이터베이스 연결이나 테이블 구조에 문제가 있을 수 있습니다.
+        </p>
+        <button 
+          onClick={diagnoseUserIssues}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#dc3545',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          문제 진단하기
+        </button>
+      </div>
+    ) : (
+      /* 기존 사용자 테이블 렌더링 코드는 그대로 유지 */
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
           <thead>
@@ -577,7 +1025,7 @@ const Admin = () => {
                   </select>
                 </td>
                 <td style={{ padding: '12px', border: '1px solid #ddd' }}>
-                  {new Date(userData.created_at).toLocaleDateString()}
+                  {userData.created_at ? new Date(userData.created_at).toLocaleDateString() : '날짜 없음'}
                 </td>
                 <td style={{ padding: '12px', border: '1px solid #ddd' }}>
                   <span style={{
@@ -594,27 +1042,29 @@ const Admin = () => {
             ))}
           </tbody>
         </table>
+        
+        {/* 페이지네이션 */}
+        <div style={{ textAlign: 'center' }}>
+          <button 
+            onClick={() => setUsersPagination(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
+            disabled={usersPagination.page === 1}
+            style={{ margin: '0 5px', padding: '8px 16px' }}
+          >
+            이전
+          </button>
+          <span>{usersPagination.page} / {usersPagination.totalPages}</span>
+          <button 
+            onClick={() => setUsersPagination(prev => ({ ...prev, page: Math.min(prev.totalPages, prev.page + 1) }))}
+            disabled={usersPagination.page === usersPagination.totalPages}
+            style={{ margin: '0 5px', padding: '8px 16px' }}
+          >
+            다음
+          </button>
+        </div>
       </div>
-      
-      <div style={{ textAlign: 'center' }}>
-        <button 
-          onClick={() => setUsersPagination(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
-          disabled={usersPagination.page === 1}
-          style={{ margin: '0 5px', padding: '8px 16px' }}
-        >
-          이전
-        </button>
-        <span>{usersPagination.page} / {usersPagination.totalPages}</span>
-        <button 
-          onClick={() => setUsersPagination(prev => ({ ...prev, page: Math.min(prev.totalPages, prev.page + 1) }))}
-          disabled={usersPagination.page === usersPagination.totalPages}
-          style={{ margin: '0 5px', padding: '8px 16px' }}
-        >
-          다음
-        </button>
-      </div>
-    </div>
-  );
+    )}
+  </div>
+);
 
   const renderTagManagement = () => (
     <div>
@@ -908,25 +1358,28 @@ const Admin = () => {
 
   const renderContentUpload = () => (
     <div>
-      <h3>컨텐츠 업로드</h3>
-      
-      {tags.length === 0 && (
-        <div style={{
-          backgroundColor: '#fff3cd',
-          border: '1px solid #ffeaa7',
-          padding: '15px',
-          borderRadius: '8px',
-          marginBottom: '20px'
-        }}>
-          <h4 style={{ margin: '0 0 10px 0', color: '#856404' }}>⚠️ 태그가 필요합니다</h4>
-          <p style={{ margin: 0, color: '#856404' }}>
-            컨텐츠를 업로드하기 전에 먼저 태그를 생성해주세요.<br />
-            태그 관리 탭에서 ASMR, Female Voice, Sleep 등의 태그를 만들어보세요.
-          </p>
-        </div>
-      )}
+    <h3>컨텐츠 업로드</h3>
+    
+    {/* 기존 태그 확인 부분 */}
+    {tags.length === 0 && (
+      <div style={{
+        backgroundColor: '#fff3cd',
+        border: '1px solid #ffeaa7',
+        padding: '15px',
+        borderRadius: '8px',
+        marginBottom: '20px'
+      }}>
+        <h4 style={{ margin: '0 0 10px 0', color: '#856404' }}>⚠️ 태그가 필요합니다</h4>
+        <p style={{ margin: 0, color: '#856404' }}>
+          컨텐츠를 업로드하기 전에 먼저 태그를 생성해주세요.<br />
+          태그 관리 탭에서 ASMR, Female Voice, Sleep 등의 태그를 만들어보세요.
+        </p>
+      </div>
+    )}
       
       <form onSubmit={handleUploadSubmit} style={{ backgroundColor: '#f8f9fa', padding: '20px', borderRadius: '8px' }}>
+        {renderCustomIdSection()}
+      
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
           <div>
             <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>제목 *</label>
@@ -940,7 +1393,7 @@ const Admin = () => {
               style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px' }}
             />
           </div>
-          
+        
           <div>
             <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>재생시간 (분)</label>
             <input
@@ -954,15 +1407,20 @@ const Admin = () => {
             />
           </div>
         </div>
-        
+      
         <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>설명 *</label>
+          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+            설명 * 
+            <small style={{ fontWeight: 'normal', color: '#666' }}>
+              (줄바꿈 가능, 이미지 URL 자동 감지)
+            </small>
+          </label>
           <textarea
             name="description"
             value={uploadForm.description}
             onChange={handleUploadFormChange}
-            placeholder="컨텐츠 설명을 입력하세요"
-            rows="4"
+            placeholder={`컨텐츠 설명을 입력하세요.\n\n이미지 URL을 입력하면 자동으로 이미지가 표시됩니다.\n예: https://example.com/image.jpg`}
+            rows="6"
             disabled={uploading}
             style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px' }}
           />

@@ -1,9 +1,9 @@
 import axios from 'axios';
 
-// API 기본 URL 설정
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5159';
+const API_BASE_URL = process.env.NODE_ENV === 'development' 
+  ? process.env.REACT_APP_LOCAL_API_URL || 'https://localhost:5159'
+  : process.env.REACT_APP_PROD_API_URL || 'https://58.233.102.165:5159';
 
-// axios 인스턴스 생성
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
